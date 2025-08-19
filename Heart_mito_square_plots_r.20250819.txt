@@ -1,0 +1,159 @@
+library(tidyverse)
+library(odbc)
+
+cs = 'SERVER=10.14.48.13;DATABASE=HMDP;Trusted_Connection=Yes;DRIVER={ODBC Driver 13 for SQL Server}'
+con = dbConnect(odbc(), .connection_string = cs)
+
+offsets = dbGetQuery(con, 'select * from Support.ChromosomeOffsets_mm10') %>%
+  mutate_at('offset', as.numeric) %>%
+  arrange(offset)
+rownames(offsets) = offsets$chr
+
+offset2 = offsets$offset  # sort(offsets$offset)
+midpoints = (offset2[2:21] + offset2[1:20])/2
+
+chr_labels = c(as.character(1:19), 'X')
+rect_bounds = data.frame(lower=offset2[0:9*2+1], upper=offset2[1:10*2])
+
+cutoff = 1e-3
+trans_cutoff = 4.1e-6
+
+cis_color = 'grey80'
+#cis_alpha = 0.002
+cis_alpha = .01
+cis_colors = c('cis'=cis_color, 'trans'='black')
+cis_alphas = c('cis'=cis_alpha, 'trans'=0.1)
+
+# ISO treated cohort mitochondrial eqtl gwas -------------------------------------------------------------
+
+d = dbGetQuery(con, "select
+probesetID, eqtl.gene_symbol, gene_start_abs, snp_bp_abs, pvalue, rsID, snp_chr, snp_bp_mm10,
+case when gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_abs + 1e6 then 'cis' else 'trans' end as cis_trans
+from expressionQTL.HeartFailureLeftVentricle_IsoproterenolAllInfo eqtl
+inner join TranscriptAnnotation.MitoCarta2 mito
+on eqtl.gene_symbol = mito.gene_symbol
+where (pvalue < 4.1e-6 and not (gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)) or
+(pvalue < 1e-3 and gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)")
+
+d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% head(20)
+#d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% View()
+
+tmp = d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n))
+tmp %>% writexl::write_xlsx('SNP_list_mito_iso_treated_20250618.xlsx')
+
+#tmp$P = 10^-tmp$n
+tmp$P = tmp$n
+tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P) %>% 
+  data.table::fwrite('iso_treated_number_of_mitocarta_genes_affected.20250618.gwas', sep='\t')
+
+library(qqman)
+tmp2 = tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P)
+tmp2$CHR = str_replace(tmp2$CHR, 'X', '20') %>% as.numeric()
+manhattan(tmp2, logp=F)
+
+# HFpEF Female cohort mitochondrial eqtl gwas -------------------------------------------------------------
+
+d = dbGetQuery(con, "select
+eqtl.gene_symbol, gene_start_abs, snp_bp_abs, pvalue, rsID, snp_chr, snp_bp_mm10,
+case when gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_abs + 1e6 then 'cis' else 'trans' end as cis_trans
+from expressionQTL.HFpEF_HeartFemaleAllInfo eqtl
+inner join TranscriptAnnotation.MitoCarta2 mito
+on eqtl.gene_symbol = mito.gene_symbol
+where (pvalue < 4.1e-6 and not (gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)) or
+(pvalue < 1e-3 and gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)")
+
+d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% head(20)
+#d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% View()
+
+tmp = d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n))
+tmp %>% writexl::write_xlsx('SNP_list_HFpEF_HeartFemaleAllInfo_20250617.xlsx')
+
+#tmp$P = 10^-tmp$n
+tmp$P = tmp$n
+tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P) %>% 
+  data.table::fwrite('HFpEF_HeartFemaleAllInfo_number_of_mitocarta_genes_affected.20250617.gwas', sep='\t')
+
+tmp2 = tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P)
+tmp2$CHR = str_replace(tmp2$CHR, 'X', '20') %>% as.numeric()
+manhattan(tmp2, logp=F)
+
+
+# HFpEF Male cohort mitochondrial eqtl gwas --------------------------------------------------------------
+
+d = dbGetQuery(con, "select
+eqtl.gene_symbol, gene_start_abs, snp_bp_abs, pvalue, rsID, snp_chr, snp_bp_mm10,
+case when gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_abs + 1e6 then 'cis' else 'trans' end as cis_trans
+from expressionQTL.HFpEF_HeartMaleAllInfo eqtl
+inner join TranscriptAnnotation.MitoCarta2 mito
+on eqtl.gene_symbol = mito.gene_symbol
+where (pvalue < 4.1e-6 and not (gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)) or
+(pvalue < 1e-3 and gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)")
+
+d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% head(20)
+#d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% View()
+
+tmp = d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n))
+tmp %>% writexl::write_xlsx('SNP_list_HFpEF_HeartMaleAllInfo_20250617.xlsx')
+
+#tmp$P = 10^-tmp$n
+tmp$P = tmp$n
+tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P) %>% 
+  data.table::fwrite('HFpEF_HeartMaleAllInfo_number_of_mitocarta_genes_affected.20250617.gwas', sep='\t')
+
+tmp2 = tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P)
+tmp2$CHR = str_replace(tmp2$CHR, 'X', '20') %>% as.numeric()
+manhattan(tmp2, logp=F)
+
+# HFHS Male cohort mitochondrial eqtl gwas --------------------------------------------------------------
+
+d = dbGetQuery(con, "select
+eqtl.gene_symbol, gene_start_abs, snp_bp_abs, pvalue, rsID, snp_chr, snp_bp_mm10,
+case when gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_abs + 1e6 then 'cis' else 'trans' end as cis_trans
+from expressionQTL.HighFatHeartMaleAllInfo eqtl
+inner join TranscriptAnnotation.MitoCarta2 mito
+on eqtl.gene_symbol = mito.gene_symbol
+where (pvalue < 4.1e-6 and not (gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)) or
+(pvalue < 1e-3 and gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)")
+
+d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% head(20)
+#d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% View()
+
+tmp = d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n))
+tmp %>% writexl::write_xlsx('SNP_list_HFHS_HeartMaleAllInfo_20250617.xlsx')
+
+#tmp$P = 10^-tmp$n
+tmp$P = tmp$n
+tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P) %>% 
+  data.table::fwrite('HFHS_HeartMaleAllInfo_number_of_mitocarta_genes_affected.20250617.gwas', sep='\t')
+
+tmp2 = tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P)
+tmp2$CHR = str_replace(tmp2$CHR, 'X', '20') %>% as.numeric()
+manhattan(tmp2, logp=F)
+
+
+# HFpEF male cohort mitochondrial pQTL gwas -------------------------------------------------------------
+
+d = dbGetQuery(con, "select
+eqtl.gene_symbol, gene_start_abs, snp_bp_abs, pvalue, rsID, snp_chr, snp_bp_mm10,
+case when gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_abs + 1e6 then 'cis' else 'trans' end as cis_trans
+from ProteinQTL.HFpEF_HeartMaleAllInfo eqtl
+inner join TranscriptAnnotation.MitoCarta2 mito
+on eqtl.gene_symbol = mito.gene_symbol
+where (pvalue < 4.1e-6 and not (gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)) or
+(pvalue < 1e-3 and gene_chr = snp_chr and snp_bp_mm10 between gene_start_bp - 1e6 and gene_end_bp + 1e6)")
+
+d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% head(20)
+#d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n)) %>% View()
+
+tmp = d %>% count(rsID, snp_chr, snp_bp_mm10) %>% arrange(desc(n))
+tmp %>% writexl::write_xlsx('SNP_list_HFpEF_pQTL_HeartMaleAllInfo_20250618.xlsx')
+
+#tmp$P = 10^-tmp$n
+tmp$P = tmp$n
+tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P) %>% 
+  data.table::fwrite('HFpEF_pQTL_HeartMaleAllInfo_number_of_mitocarta_genes_affected.20250618.gwas', sep='\t')
+
+tmp2 = tmp %>% select(SNP = rsID, CHR=snp_chr, BP = snp_bp_mm10, P)
+tmp2$CHR = str_replace(tmp2$CHR, 'X', '20') %>% as.numeric()
+manhattan(tmp2, logp=F)
+
